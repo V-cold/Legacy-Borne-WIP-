@@ -18,15 +18,15 @@ from pathlib import Path
 # --- Paths ---
 DELTARUNE = Path("DELTARUNE")
 GLOBAL_MUS = DELTARUNE / "mus"
-GLOBAL_DATA = Path("/DELTARUNE/data.win")
+GLOBAL_DATA = Path("DELTARUNE/data.win")
 
 # chapters: I opted to make this a dictionary so we can cycle through each chapter sequentially when loading. Part of me wonders if there is a more optimized way
 CHAPTERS = {
 "CH1": DELTARUNE / "chapter1_windows", # "The heroes defeat the king and stop the dragon."
 "CH2": DELTARUNE/  "chapter2_windows", # "The heroes do battle in chariots to save the Queen."
 "CH3": DELTARUNE/  "chapter3_windows", # "The heroes travel among the islands and catch a glimpse of a lost land."
-"CH4": DELTARUNE / "chapter4_windows"#,# "A great smith gives the heroes a terrible weapon." 
-#"CH5": DELTARUNE / "chapter5_windows",  "The vast garden is charred in an inferno of jealousy."
+"CH4": DELTARUNE / "chapter4_windows", # "A great smith gives the heroes a terrible weapon."
+"CH5": DELTARUNE / "chapter5_windows", # "The vast garden is charred in an inferno of jealousy."
 #"CH6": DELTARUNE / "chapter6_windows",  "...What happens next? Geheheh! Who knows?"
 #"CH7": DELTARUNE / "chapter7_windows"   "There was only one more chapter... After that, It all stopped. That next book, it never did get written."
 }
@@ -38,6 +38,7 @@ CHAPTERS = {
 # products
 EXPORTS = Path("rawExports")
 ROMFS = Path("romfs")
+qualityCheck = []
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -76,12 +77,19 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         chSpriteExport.mkdir(parents=True, exist_ok=True)
         try:
             subprocess.run([
-                "wine","UndertaleModTool.exe", str(chDataPath),
-                "Scripts/Resource Exporters/ExportAllSprites.csx",
+                "./UndermodCLI/UndertaleModCli", str(chDataPath),
+                "UndermodCLI/Scripts/Resource Exporters/ExportAllSprites.csx",
                 "-o", str(chSpriteExport)
-            ], check=True, stdout=subprocess.DEVNULL)
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         except subprocess.CalledProcessError as e:
-             print(f"Error in {c} sprite extraction: {e}.")
+            print(f"Error in {c} sprite extraction: {e}.")
+
+            qualityCheck.append({
+            "chapter": c,
+            "task": "Sprite Extraction",
+            "command": " ".join(e.cmd),
+            "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error (Exit code 1)"
+            })
 
         #Tileset Extraction-----------------------------------------------
         print(f"Unpacking tilesets from {c}, ")
@@ -89,12 +97,19 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         chTilesetExport.mkdir(parents=True, exist_ok=True)
         try:
             subprocess.run([
-                "wine","UndertaleModTool.exe", str(chDataPath),
-                "Scripts/Resource Exporters/ExportAllTilesets.csx",
+                "./UndermodCLI/UndertaleModCli", str(chDataPath),
+                "UndermodCLI/Scripts/Resource Exporters/ExportAllTilesets.csx",
                 "-o", str(chTilesetExport)
-            ], check=True, stdout=subprocess.DEVNULL)
+            ], check=True, stdout=subprocess.DEVNULL,stderr=subprocess.PIPE, text=True)
         except subprocess.CalledProcessError as e:
-             print(f"Error in {c} tileset extraction: {e}.")
+            print(f"Error in {c} tileset extraction: {e}.")
+
+            qualityCheck.append({
+            "chapter": c,
+            "task": "Tileset Extraction",
+            "command": " ".join(e.cmd),
+            "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error (Exit code 1)"
+            })
 
         #Music Extraction-------------------------------------------------
         print(f"Unpacking Mus from {c}, ")
@@ -109,7 +124,7 @@ def extractionProtocol(chapters, dataMain, exportFiles):
 
     #Global Music Extraction-------------------------------------------------
     print("Unpacking global Mus, ")
-    if  GLOBAL_MUS.exists():
+    if  GLOBAL_MUS.exists():                                                #TODO: This isn't a good bug catcher
         globalMusExport = exportFiles / "gMus"
         globalMusExport.mkdir(parents=True, exist_ok=True)
 
@@ -126,27 +141,40 @@ def extractionProtocol(chapters, dataMain, exportFiles):
     spriteExport.mkdir(parents=True, exist_ok=True)
     try:
         subprocess.run([
-            "wine","UndertaleModTool.exe", str(dataMain),
-            "Scripts/Resource Exporters/ExportAllSprites.csx",
+            "./UndermodCLI/UndertaleModCli", str(dataMain),
+            "UndermodCLI/Scripts/Resource Exporters/ExportAllSprites.csx",
             "-o", str(spriteExport)
 
-        ], check=True, stdout=subprocess.DEVNULL)
+        ], check=True, stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,text=True)
     except subprocess.CalledProcessError as e:
         print(f"Error in global sprite extraction: {e}.")
+
+        qualityCheck.append({
+        "chapter": "Global",
+        "task": "Sprite Extraction",
+        "command": " ".join(e.cmd),
+        "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error (Exit code 1)"
+        })
 
     #Global Tileset Extraction-----------------------------------------------
     print("Unpacking global tilesets, ")
     tilesetExport = exportFiles / "tilesets"
     tilesetExport.mkdir(parents=True, exist_ok=True)
     try:
-        subprocess.run([
-            "wine","UndertaleModTool.exe", str(dataMain),
-            "Scripts/Resource Exporters/ExportAllTilesets.csx",
+        result = subprocess.run([
+            "./UndermodCLI/UndertaleModCli", str(dataMain),
+            "UndermodCLI/Scripts/Resource Exporters/ExportAllTilesets.csx",
             "-o", str(tilesetExport)
-        ], check=True, stdout=subprocess.DEVNULL)
+        ], check=True, stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,text=True)
     except subprocess.CalledProcessError as e:
-            print(f"Error in global tileset extraction: {e}.")
-
+        print(f"Error in global tileset extraction: {e}.")
+        
+        qualityCheck.append({
+        "chapter": "Global",
+        "task": "Tileset Extraction",
+        "command": " ".join(e.cmd),
+        "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error (Exit code 1)"
+        })
 #TODO: grab the client version of undermod
 
 def conversionProtocol():
@@ -158,11 +186,39 @@ def compilationProtocol():
 def packagingProtocol():
     # Creates the rom file via part 2 algorithms and cleans the file space to improve user experience. 
     pass
-def qualityCheckProtocol():
-    # Creates a log file and records any tripped errors. Ensures rom integrity as well as making sure all tests passed
+def qualityCheckProtocol(errors, exportRoot="rawExports"):
+    # Analyzes and records any tripped errors. Ensures rom integrity as well as making sure all tests passed
+    logPath = Path("pipelineQualityCheck.log")
+
+    #TODO 1. Integrity
+
+    # 2. Logging
+    logLines = [ 
+        "V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V",
+        f"                           Legacy Borne Quality Check                           ",
+        "V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V",
+        f"Integrity check results: WARNING [Unimplimented]", #TODO integrity check
+        f"Error check results: {'ERROR' if errors else 'No errors detected'}",
+        "---------------------------------------------------------------------------------",
+    ]
+    if errors:
+        logLines.append(f"{len(errors)} have been detected!\n")
+        for index, err in enumerate(errors, 1):
+            logLines.extend([
+            f"[{index}] Location:{err['chapter']} Task: {err['task']}",
+            f"          Command: {err['command']}",
+            f"DIAGNOSIS:\n {err['error_msg']}",
+            ])
+    else:
+        logLines.append("No errors flagged during asset extraction.")
+    # Write report out to disk
+    with open(logPath, "w", encoding="utf-8") as logFile:
+        logFile.write("\n".join(logLines))
+    
     pass
 
 if __name__ == "__main__":
     # Test execution to verify directory construction works smoothly
     extractionProtocol(CHAPTERS, GLOBAL_DATA, EXPORTS)
-    print("Roots framework successfully loaded. Ready for pipeline integration.")
+    qualityCheckProtocol(qualityCheck, exportRoot="rawExports")
+    print("Reached end of execution!")
