@@ -6,6 +6,8 @@
 # Date created: 2026/06/22 2:30am JST
 # Mood: I need a redbull
 
+#TODO: somehow a random leagacy borne file is made on run. as u can tell I ish sleepyu from where this todo comment is
+
 # Libraries
 import os
 import subprocess
@@ -36,7 +38,7 @@ CHAPTERS = {
 #They never did
 
 # products
-EXPORTS = Path("rawExports")
+EXPORTS = Path("../rawExports")
 ROMFS = Path("romfs")
 qualityCheck = []
 
@@ -46,8 +48,6 @@ qualityCheck = []
 ROMFS.mkdir(parents=True, exist_ok=True)
 (ROMFS / "gfx").mkdir(exist_ok=True)
 (ROMFS / "audio").mkdir(exist_ok=True)
-
-EXPORTS.mkdir(parents=True, exist_ok=True)
 
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -60,26 +60,30 @@ EXPORTS.mkdir(parents=True, exist_ok=True)
 
 # Functions
 def extractionProtocol(chapters, dataMain, exportFiles):
+
+    BASE_DIR = Path(__file__).parent.resolve()
+    CLIENT_PATH = BASE_DIR / "UndermodCLI" / "UndertaleModCli"
+
     # Utilizes Undermod to dump assets for each chapter
     print("\nRunning Extraction Protocol...")
     #Chapter Extraction --------------------------------------------------
     for c, chapterPath in chapters.items():
+        rawChapterDir = Path(chapterPath).resolve()
+        chDataPath = rawChapterDir / "data.win"
         if not chapterPath.exists():
             print(f"Skipping {c}, data.win not found.")
             continue
 
-        chDataPath = chapterPath / "data.win"
-        chExports = exportFiles / c
+        chDataPath = Path(chapterPath / "data.win")
+        chExports = BASE_DIR / "LegacyBorne" / exportFiles / c
 
         #Sprite Extraction------------------------------------------------
         print(f"Unpacking sprites from {c}, ")
-        chSpriteExport = chExports / "sprites"
+        chSpriteExport = Path(chExports / "sprites")
         chSpriteExport.mkdir(parents=True, exist_ok=True)
         try:
             subprocess.run([
-                "./UndermodCLI/UndertaleModCli", str(chDataPath),
-                "UndermodCLI/Scripts/Resource Exporters/ExportAllSprites.csx",
-                "-o", str(chSpriteExport)
+                str(CLIENT_PATH), "dump", str(chDataPath), "--sprites", "-v", "-o", str(chSpriteExport)
             ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         except subprocess.CalledProcessError as e:
             print(f"Error in {c} sprite extraction: {e}.")
@@ -91,60 +95,66 @@ def extractionProtocol(chapters, dataMain, exportFiles):
             "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error (Exit code 1)"
             })
 
-        #Tileset Extraction-----------------------------------------------
-        print(f"Unpacking tilesets from {c}, ")
-        chTilesetExport = chExports / "tilesets"
-        chTilesetExport.mkdir(parents=True, exist_ok=True)
+        # Script Extraction------------------------------------------------
+        print(f"Unpacking scripts from {c}... ")
+        chScriptExport = chExports / "scripts"
+        chScriptExport.mkdir(parents=True, exist_ok=True)
         try:
             subprocess.run([
-                "./UndermodCLI/UndertaleModCli", str(chDataPath),
-                "UndermodCLI/Scripts/Resource Exporters/ExportAllTilesets.csx",
-                "-o", str(chTilesetExport)
-            ], check=True, stdout=subprocess.DEVNULL,stderr=subprocess.PIPE, text=True)
+                str(CLIENT_PATH), "dump", str(chDataPath), "--code", "UMT_DUMP_ALL", "-v", "-o", str(chScriptExport)
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         except subprocess.CalledProcessError as e:
-            print(f"Error in {c} tileset extraction: {e}.")
-
+            print(f"Error in {c} script extraction: {e}.")
             qualityCheck.append({
-            "chapter": c,
-            "task": "Tileset Extraction",
-            "command": " ".join(e.cmd),
-            "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error (Exit code 1)"
+                "chapter": c, "task": "Script Extraction",
+                "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
             })
 
+        # String Extraction------------------------------------------------
+        print(f"Unpacking strings from {c}... ")
+        chStringExport = chExports / "strings"
+        chStringExport.mkdir(parents=True, exist_ok=True)
+        try:
+            subprocess.run([
+                str(CLIENT_PATH), "dump", str(chDataPath), "--strings", "-v", "-o", str(chStringExport)
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error in {c} string extraction: {e}.")
+            qualityCheck.append({
+                "chapter": c, "task": "String Extraction",
+                "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+            })
+
+        # Texture Extraction--------------------------------------------------
+        print(f"Unpacking textures from {c}... ")
+        chTextureExport = chExports / "textures"
+        chTextureExport.mkdir(parents=True, exist_ok=True)
+        try:
+            subprocess.run([
+                str(CLIENT_PATH), "dump", str(chDataPath), "--textures", "-v", "-o", str(chTextureExport)
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error in {c} texture extraction: {e}.")
+            qualityCheck.append({
+                "chapter": c, "task": "Texture Extraction",
+                "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+            })
+
+
         #Music Extraction-------------------------------------------------
+        chMusExport = Path(chExports / "mus")
+        chMusExport.mkdir(parents=True, exist_ok=True)
         print(f"Unpacking Mus from {c}, ")
-        if  chapterPath.exists():
-            chapterMusExport = chExports / "chMus"
-            chapterMusExport.mkdir(parents=True, exist_ok=True)
-
-            for audio in chapterPath.glob("*.ogg"):
-                shutil.copy2(audio, chapterMusExport / audio.name)
-
-        
-
-    #Global Music Extraction-------------------------------------------------
-    print("Unpacking global Mus, ")
-    if  GLOBAL_MUS.exists():                                                #TODO: This isn't a good bug catcher
-        globalMusExport = exportFiles / "gMus"
-        globalMusExport.mkdir(parents=True, exist_ok=True)
-
-        for audio in GLOBAL_MUS.glob("*.ogg"):
-            shutil.copy2(audio, globalMusExport / audio.name)
-
-    else:
-        print("Error in global music extraction.")
-        sys.exit(1)
+        for audio in chapterPath.glob("*.ogg"):
+            shutil.copy2(audio, chMusExport / audio.name)
 
     #Global Sprite Extraction------------------------------------------------
     print("Unpacking global sprites, ")
-    spriteExport = exportFiles / "sprites"
+    spriteExport = "LegacyBorne" / exportFiles / "sprites"
     spriteExport.mkdir(parents=True, exist_ok=True)
     try:
         subprocess.run([
-            "./UndermodCLI/UndertaleModCli", str(dataMain),
-            "UndermodCLI/Scripts/Resource Exporters/ExportAllSprites.csx",
-            "-o", str(spriteExport)
-
+            CLIENT_PATH, "dump", str(dataMain), "--sprites", "-v", "-o", str(spriteExport)
         ], check=True, stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,text=True)
     except subprocess.CalledProcessError as e:
         print(f"Error in global sprite extraction: {e}.")
@@ -156,26 +166,59 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error (Exit code 1)"
         })
 
-    #Global Tileset Extraction-----------------------------------------------
-    print("Unpacking global tilesets, ")
-    tilesetExport = exportFiles / "tilesets"
-    tilesetExport.mkdir(parents=True, exist_ok=True)
+    # Global Script Extraction ------------------------------------------------
+    print("Unpacking global scripts... ")
+    globalScriptExport = "LegacyBorne" / exportFiles / "scripts"
+    globalScriptExport.mkdir(parents=True, exist_ok=True)
     try:
-        result = subprocess.run([
-            "./UndermodCLI/UndertaleModCli", str(dataMain),
-            "UndermodCLI/Scripts/Resource Exporters/ExportAllTilesets.csx",
-            "-o", str(tilesetExport)
-        ], check=True, stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,text=True)
+        subprocess.run([
+            str(CLIENT_PATH), "dump", str(dataMain), "--code", "UMT_DUMP_ALL", "-v", "-o", str(globalScriptExport)
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     except subprocess.CalledProcessError as e:
-        print(f"Error in global tileset extraction: {e}.")
-        
+        print(f"Error in global script extraction: {e}.")
         qualityCheck.append({
-        "chapter": "Global",
-        "task": "Tileset Extraction",
-        "command": " ".join(e.cmd),
-        "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error (Exit code 1)"
+            "chapter": "Global", "task": "Script Extraction",
+            "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
         })
-#TODO: grab the client version of undermod
+
+    # Global String Extraction ------------------------------------------------
+    print("Unpacking global strings... ")
+    globalStringExport = "LegacyBorne" / exportFiles / "strings"
+    globalStringExport.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run([
+            str(CLIENT_PATH), "dump", str(dataMain), "--strings", "-v", "-o", str(globalStringExport)
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error in global string extraction: {e}.")
+        qualityCheck.append({
+            "chapter": "Global", "task": "String Extraction",
+            "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+        })
+
+    # Global Texture Extraction --------------------------------------------------
+    print("Unpacking global textures... ")
+    globalTextureExport = "LegacyBorne" / exportFiles / "textures"
+    globalTextureExport.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run([
+            str(CLIENT_PATH), "dump", str(dataMain), "--textures", "-v", "-o", str(globalTextureExport)
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error in global texture extraction: {e}.")
+        qualityCheck.append({
+            "chapter": "Global", "task": "Texture Extraction",
+            "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+        })
+
+        #Global Music Extraction-------------------------------------------------
+    print("Unpacking global Mus, ")
+   
+    globalMusExport = "LegacyBorne" / exportFiles / "gMus"
+    globalMusExport.mkdir(parents=True, exist_ok=True)
+
+    for audio in GLOBAL_MUS.glob("*.ogg"):
+        shutil.copy2(audio, globalMusExport / audio.name)
 
 def conversionProtocol():
     # Converts all assets into usable assets
