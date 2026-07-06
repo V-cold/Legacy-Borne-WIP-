@@ -18,20 +18,22 @@ from pathlib import Path
 # Paths
 # main path
 # --- Paths ---
-DELTARUNE = Path("DELTARUNE")
+BASE_DIR = Path(__file__).parent.resolve()
+DELTARUNE = BASE_DIR / "DELTARUNE"
 GLOBAL_MUS = DELTARUNE / "mus"
 GLOBAL_DATA = Path("DELTARUNE/data.win")
 
 # chapters: I opted to make this a dictionary so we can cycle through each chapter sequentially when loading. Part of me wonders if there is a more optimized way
 CHAPTERS = {
 "CH1": DELTARUNE / "chapter1_windows", # "The heroes defeat the king and stop the dragon."
-"CH2": DELTARUNE/  "chapter2_windows", # "The heroes do battle in chariots to save the Queen."
-"CH3": DELTARUNE/  "chapter3_windows", # "The heroes travel among the islands and catch a glimpse of a lost land."
+"CH2": DELTARUNE / "chapter2_windows", # "The heroes do battle in chariots to save the Queen."
+"CH3": DELTARUNE / "chapter3_windows", # "The heroes travel among the islands and catch a glimpse of a lost land."
 "CH4": DELTARUNE / "chapter4_windows", # "A great smith gives the heroes a terrible weapon."
 "CH5": DELTARUNE / "chapter5_windows", # "The vast garden is charred in an inferno of jealousy."
-#"CH6": DELTARUNE / "chapter6_windows",  "...What happens next? Geheheh! Who knows?"
-#"CH7": DELTARUNE / "chapter7_windows"   "There was only one more chapter... After that, It all stopped. That next book, it never did get written."
+"CH6": DELTARUNE / "chapter6_windows", # "...What happens next? Geheheh! Who knows?"
+"CH7": DELTARUNE / "chapter7_windows"  # "There was only one more chapter... After that, It all stopped. That next book, it never did get written."
 }
+
 
 #The ones who could write the next, the youth, the pen was lying there for them to pick up.
 #To make the next page.
@@ -50,7 +52,6 @@ ROMFS.mkdir(parents=True, exist_ok=True)
 (ROMFS / "audio").mkdir(exist_ok=True)
 
 #----------------------------------------------------------------------------------------------------------------------------------------------------
-
 # part 1 and part 2 algorithms: Let me address what exactly these are here. Part one algorithms are crtical rules that are setup early on to optimize the creation of our rom.
 #                               think of them like a processor's op codes but instead it will lay out how exactly each asset gets loaded or de loaded, how will we load sfk, 
 #                               what will trigger a legacyBorne side load screen. Because the 3ds can't handle a large majority of what a PC can, the part one algorithms are
@@ -60,11 +61,14 @@ ROMFS.mkdir(parents=True, exist_ok=True)
 
 # Functions
 def extractionProtocol(chapters, dataMain, exportFiles):
-
+    # Probably the most straight forward function.
+    # TODO: String extraction may not be neccessary.
+    # TODO: Video extraction for tenna cutscene and flowery cutscene
     BASE_DIR = Path(__file__).parent.resolve()
     CLIENT_PATH = BASE_DIR / "UndermodCLI" / "UndertaleModCli"
+    script_path = BASE_DIR / "LBScripts" / "extract_texture_map.csx"
 
-    # Utilizes Undermod to dump assets for each chapter
+    # Utilizes Undermod to dump assets for each chapter and then global
     print("\nRunning Extraction Protocol...")
     #Chapter Extraction --------------------------------------------------
     for c, chapterPath in chapters.items():
@@ -77,23 +81,29 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         chDataPath = Path(chapterPath / "data.win")
         chExports = BASE_DIR / "LegacyBorne" / exportFiles / c
 
-        #Sprite Extraction------------------------------------------------
-        print(f"Unpacking sprites from {c}, ")
-        chSpriteExport = Path(chExports / "sprites")
-        chSpriteExport.mkdir(parents=True, exist_ok=True)
+        #Texture Map (TPI) Extraction----------------------------------------
+        print(f"Unpacking texture maps from {c}... ")
+        
         try:
             subprocess.run([
-                str(CLIENT_PATH), "dump", str(chDataPath), "--sprites", "-v", "-o", str(chSpriteExport)
+                str(CLIENT_PATH), "load", str(chDataPath), "-s", str(script_path)
             ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Error in {c} sprite extraction: {e}.")
 
+            # Move the csv to exports
+            sourceCSV = rawChapterDir / "texture_metadata_map.csv"
+            destinationCSV = chExports / "texture_metadata_map.csv"
+            if sourceCSV.exists():
+                shutil.move(str(sourceCSV), str(destinationCSV))
+        
+        except subprocess.CalledProcessError as e:
+            print(f"Error in {c} texture map extraction: {e}")
             qualityCheck.append({
-            "chapter": c,
-            "task": "Sprite Extraction",
-            "command": " ".join(e.cmd),
-            "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error (Exit code 1)"
+                "chapter": c, 
+                "task": "TPI Extraction",
+                "command": " ".join(e.cmd), 
+                "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
             })
+                
 
         # Script Extraction------------------------------------------------
         print(f"Unpacking scripts from {c}... ")
@@ -106,8 +116,10 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         except subprocess.CalledProcessError as e:
             print(f"Error in {c} script extraction: {e}.")
             qualityCheck.append({
-                "chapter": c, "task": "Script Extraction",
-                "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+                "chapter": c, 
+                "task": "Script Extraction",
+                "command": " ".join(e.cmd), 
+                "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
             })
 
         # String Extraction------------------------------------------------
@@ -121,8 +133,10 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         except subprocess.CalledProcessError as e:
             print(f"Error in {c} string extraction: {e}.")
             qualityCheck.append({
-                "chapter": c, "task": "String Extraction",
-                "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+                "chapter": c, 
+                "task": "String Extraction",
+                "command": " ".join(e.cmd), 
+                "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
             })
 
         # Texture Extraction--------------------------------------------------
@@ -136,8 +150,10 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         except subprocess.CalledProcessError as e:
             print(f"Error in {c} texture extraction: {e}.")
             qualityCheck.append({
-                "chapter": c, "task": "Texture Extraction",
-                "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+                "chapter": c, 
+                "task": "Texture Extraction",
+                "command": " ".join(e.cmd), 
+                "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
             })
 
 
@@ -148,22 +164,27 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         for audio in chapterPath.glob("*.ogg"):
             shutil.copy2(audio, chMusExport / audio.name)
 
-    #Global Sprite Extraction------------------------------------------------
-    print("Unpacking global sprites, ")
-    spriteExport = "LegacyBorne" / exportFiles / "sprites"
-    spriteExport.mkdir(parents=True, exist_ok=True)
+    #Global Texture Map (TPI) Extraction----------------------------------------
+    print(f"Unpacking global texture maps... ")
+    
     try:
         subprocess.run([
-            CLIENT_PATH, "dump", str(dataMain), "--sprites", "-v", "-o", str(spriteExport)
-        ], check=True, stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,text=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error in global sprite extraction: {e}.")
+            str(CLIENT_PATH), "load", str(dataMain), "-s", str(script_path)
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
 
+        # Move the csv to exports
+        gSourceCSV = DELTARUNE / "texture_metadata_map.csv"
+        gDestinationCSV = exportFiles / "texture_metadata_map.csv"
+        if gSourceCSV.exists():
+            shutil.move(str(gSourceCSV), str(gDestinationCSV))
+    
+    except subprocess.CalledProcessError as e:
+        print(f"Error in global texture map extraction: {e}")
         qualityCheck.append({
-        "chapter": "Global",
-        "task": "Sprite Extraction",
-        "command": " ".join(e.cmd),
-        "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error (Exit code 1)"
+            "chapter": "Global", 
+            "task": "TPI Extraction",
+            "command": " ".join(e.cmd), 
+            "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
         })
 
     # Global Script Extraction ------------------------------------------------
@@ -177,8 +198,10 @@ def extractionProtocol(chapters, dataMain, exportFiles):
     except subprocess.CalledProcessError as e:
         print(f"Error in global script extraction: {e}.")
         qualityCheck.append({
-            "chapter": "Global", "task": "Script Extraction",
-            "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+            "chapter": "Global", 
+            "task": "Script Extraction",
+            "command": " ".join(e.cmd), 
+            "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
         })
 
     # Global String Extraction ------------------------------------------------
@@ -192,8 +215,10 @@ def extractionProtocol(chapters, dataMain, exportFiles):
     except subprocess.CalledProcessError as e:
         print(f"Error in global string extraction: {e}.")
         qualityCheck.append({
-            "chapter": "Global", "task": "String Extraction",
-            "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+            "chapter": "Global", 
+            "task": "String Extraction",
+            "command": " ".join(e.cmd), 
+            "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
         })
 
     # Global Texture Extraction --------------------------------------------------
@@ -207,22 +232,63 @@ def extractionProtocol(chapters, dataMain, exportFiles):
     except subprocess.CalledProcessError as e:
         print(f"Error in global texture extraction: {e}.")
         qualityCheck.append({
-            "chapter": "Global", "task": "Texture Extraction",
-            "command": " ".join(e.cmd), "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+            "chapter": "Global", 
+            "task": "Texture Extraction",
+            "command": " ".join(e.cmd), 
+            "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
         })
 
         #Global Music Extraction-------------------------------------------------
     print("Unpacking global Mus, ")
    
-    globalMusExport = "LegacyBorne" / exportFiles / "gMus"
+    globalMusExport = "LegacyBorne" / exportFiles / "mus"
     globalMusExport.mkdir(parents=True, exist_ok=True)
 
     for audio in GLOBAL_MUS.glob("*.ogg"):
         shutil.copy2(audio, globalMusExport / audio.name)
 
-def conversionProtocol():
-    # Converts all assets into usable assets
+    EXPORTS_LOCALES = { # Used by conversion for the next step
+    "GLOBAL": EXPORTS,
+    "CH1": EXPORTS / "CH1",
+    "CH2": EXPORTS / "CH2",
+    "CH3": EXPORTS / "CH3",
+    "CH4": EXPORTS / "CH4",
+    "CH5": EXPORTS / "CH5",
+    "CH6": EXPORTS / "CH6",
+    "CH7": EXPORTS / "CH7"
+    }
+
+    return EXPORTS_LOCALES
+
+def conversionProtocol(exportFiles):
+    print("\nRunning Conversion Protocol...")
+    for c, targetPath in exportFiles.items():
+        targetPath = Path(targetPath)
+        if not targetPath.exists():
+            continue
+            
+        # Texture conversion. The goal here is to take the 2048 gml texture sheets with the TPI and feed it into 3ds standard 1024 quadrants
+        textureDir = targetPath / "textures"
+        if textureDir.exists():
+            for imgFile in textureDir.glob("*.png"):
+                pass # TODO: Pillow quadrant-slicing and UV map adjustments
+
+        # Video conversion. We are just down scaling and converting to a nice pre-rendered format the 3ds will accept
+        videoDir = targetPath / "videos"
+        if videoDir.exists():
+            for videoFile in videoDir.glob("*"):
+                pass # TODO: downscaling
+
+        # Music conversion. Near same as videos
+        musDir = targetPath / "mus"
+        if musDir.exists():
+            for audioFile in musDir.glob("*.ogg"):
+                pass # TODO: downscaling
+
+        #POSSIBLE ROADBLOCKS: 
+        #File size won't be an issue on static storage, but ram wise it will be
     pass
+
 def compilationProtocol():
     # Compiles assets and scripts and passes it all through part 1 algorithms who's products are handed off to part 2 in packaging
     pass
@@ -262,6 +328,6 @@ def qualityCheckProtocol(errors, exportRoot="rawExports"):
 
 if __name__ == "__main__":
     # Test execution to verify directory construction works smoothly
-    extractionProtocol(CHAPTERS, GLOBAL_DATA, EXPORTS)
+    conversionProtocol(extractionProtocol(CHAPTERS, GLOBAL_DATA, EXPORTS))
     qualityCheckProtocol(qualityCheck, exportRoot="rawExports")
     print("Reached end of execution!")
