@@ -63,7 +63,7 @@ ROMFS.mkdir(parents=True, exist_ok=True)
 def extractionProtocol(chapters, dataMain, exportFiles):
     # Probably the most straight forward function.
     # TODO: String extraction may not be neccessary.
-    # TODO: Video extraction for tenna cutscene and flowery cutscene
+    # TODO: Video extraction for tenna cutscene and flowery cutscene(can grab this straight from deltarune file)
     BASE_DIR = Path(__file__).parent.resolve()
     CLIENT_PATH = BASE_DIR / "UndermodCLI" / "UndertaleModCli"
     script_path = BASE_DIR / "LBScripts" / "extract_texture_map.csx"
@@ -92,6 +92,9 @@ def extractionProtocol(chapters, dataMain, exportFiles):
             # Move the csv to exports
             sourceCSV = rawChapterDir / "texture_metadata_map.csv"
             destinationCSV = chExports / "texture_metadata_map.csv"
+
+            destinationCSV.parent.mkdir(parents=True, exist_ok=True)
+
             if sourceCSV.exists():
                 shutil.move(str(sourceCSV), str(destinationCSV))
         
@@ -174,7 +177,10 @@ def extractionProtocol(chapters, dataMain, exportFiles):
 
         # Move the csv to exports
         gSourceCSV = DELTARUNE / "texture_metadata_map.csv"
-        gDestinationCSV = exportFiles / "texture_metadata_map.csv"
+        gDestinationCSV = BASE_DIR / "LegacyBorne" / exportFiles / "texture_metadata_map.csv"
+
+        gDestinationCSV.parent.mkdir(parents=True, exist_ok=True)
+
         if gSourceCSV.exists():
             shutil.move(str(gSourceCSV), str(gDestinationCSV))
     
