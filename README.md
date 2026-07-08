@@ -3,7 +3,7 @@ This repository is open source and made to be modular
 use this however you wish, but I do not consent to this
 being used to train AI. I hope you can respect that.
 
-To create an environment suitable to build your 3DS Deltarune Rom, you will need,
+### To create an environment suitable to build your 3DS Deltarune Rom, you will need,
 1. The UndertaleModCli
 2. A copy of Deltarune
 3. A Nintendo 3DS or Nintendo New 3DS (or equivalent emulator)
