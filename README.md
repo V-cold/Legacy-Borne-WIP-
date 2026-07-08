@@ -1,7 +1,7 @@
 # Legacy Borne 0.3 Pre-alpha
-## This repository is open source and made to be modular
-## use this however you wish, but I do not consent to this
-## being used to train AI. I hope you can respect that.
+This repository is open source and made to be modular
+use this however you wish, but I do not consent to this
+being used to train AI. I hope you can respect that.
 
 To create an environment suitable to build your 3DS Deltarune Rom, you will need,
 1. The UndertaleModCli
