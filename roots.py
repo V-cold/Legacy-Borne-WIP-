@@ -13,7 +13,11 @@ import os
 import subprocess
 import shutil
 import sys
+import csv
 from pathlib import Path
+
+# Used in Texture sheet conversion
+from PIL import Image
 
 # Paths
 # main path
@@ -40,7 +44,7 @@ CHAPTERS = {
 #They never did
 
 # products
-EXPORTS = Path("../rawExports")
+EXPORTS = Path(BASE_DIR / "rawExports")
 ROMFS = Path("romfs")
 qualityCheck = []
 
@@ -51,6 +55,7 @@ ROMFS.mkdir(parents=True, exist_ok=True)
 (ROMFS / "gfx").mkdir(exist_ok=True)
 (ROMFS / "audio").mkdir(exist_ok=True)
 
+EXPORTS.mkdir(parents=True, exist_ok=True)
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 # part 1 and part 2 algorithms: Let me address what exactly these are here. Part one algorithms are crtical rules that are setup early on to optimize the creation of our rom.
 #                               think of them like a processor's op codes but instead it will lay out how exactly each asset gets loaded or de loaded, how will we load sfk, 
@@ -163,7 +168,7 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         #Music Extraction-------------------------------------------------
         chMusExport = Path(chExports / "mus")
         chMusExport.mkdir(parents=True, exist_ok=True)
-        print(f"Unpacking Mus from {c}, ")
+        print(f"Unpacking mus from {c}, ")
         for audio in chapterPath.glob("*.ogg"):
             shutil.copy2(audio, chMusExport / audio.name)
 
@@ -177,7 +182,7 @@ def extractionProtocol(chapters, dataMain, exportFiles):
 
         # Move the csv to exports
         gSourceCSV = DELTARUNE / "texture_metadata_map.csv"
-        gDestinationCSV = BASE_DIR / "LegacyBorne" / exportFiles / "texture_metadata_map.csv"
+        gDestinationCSV = BASE_DIR / "LegacyBorne" / exportFiles / "GLOBAL" / "texture_metadata_map.csv"
 
         gDestinationCSV.parent.mkdir(parents=True, exist_ok=True)
 
@@ -195,7 +200,7 @@ def extractionProtocol(chapters, dataMain, exportFiles):
 
     # Global Script Extraction ------------------------------------------------
     print("Unpacking global scripts... ")
-    globalScriptExport = "LegacyBorne" / exportFiles / "scripts"
+    globalScriptExport = "LegacyBorne" / exportFiles / "GLOBAL" / "scripts"
     globalScriptExport.mkdir(parents=True, exist_ok=True)
     try:
         subprocess.run([
@@ -212,7 +217,7 @@ def extractionProtocol(chapters, dataMain, exportFiles):
 
     # Global String Extraction ------------------------------------------------
     print("Unpacking global strings... ")
-    globalStringExport = "LegacyBorne" / exportFiles / "strings"
+    globalStringExport = "LegacyBorne" / exportFiles / "GLOBAL" / "strings"
     globalStringExport.mkdir(parents=True, exist_ok=True)
     try:
         subprocess.run([
@@ -229,7 +234,7 @@ def extractionProtocol(chapters, dataMain, exportFiles):
 
     # Global Texture Extraction --------------------------------------------------
     print("Unpacking global textures... ")
-    globalTextureExport = "LegacyBorne" / exportFiles / "textures"
+    globalTextureExport = "LegacyBorne" / exportFiles / "GLOBAL" / "textures"
     globalTextureExport.mkdir(parents=True, exist_ok=True)
     try:
         subprocess.run([
@@ -245,48 +250,238 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         })
 
         #Global Music Extraction-------------------------------------------------
-    print("Unpacking global Mus, ")
+    print("Unpacking global mus, ")
    
-    globalMusExport = "LegacyBorne" / exportFiles / "mus"
+    globalMusExport = "LegacyBorne" / exportFiles / "GLOBAL" / "mus"
     globalMusExport.mkdir(parents=True, exist_ok=True)
 
     for audio in GLOBAL_MUS.glob("*.ogg"):
         shutil.copy2(audio, globalMusExport / audio.name)
-
-    EXPORTS_LOCALES = { # Used by conversion for the next step
-    "GLOBAL": EXPORTS,
-    "CH1": EXPORTS / "CH1",
-    "CH2": EXPORTS / "CH2",
-    "CH3": EXPORTS / "CH3",
-    "CH4": EXPORTS / "CH4",
-    "CH5": EXPORTS / "CH5",
-    "CH6": EXPORTS / "CH6",
-    "CH7": EXPORTS / "CH7"
-    }
-
-    return EXPORTS_LOCALES
+    
+    pass
 
 def conversionProtocol(exportFiles):
-    print("\nRunning Conversion Protocol...")
-    for c, targetPath in exportFiles.items():
-        targetPath = Path(targetPath)
-        if not targetPath.exists():
+    print("\nRunning Conversion Protocol ...")
+
+    if not exportFiles.exists():
+        print("Fatal: Master exports directory missing!")
+        qualityCheck.append({ 
+            "task": "Conversion Protocol",
+            "command": " ".join(e.cmd), 
+            "error_msg": "Fatal: Master exports directory missing!"
+        })
+        return
+
+    for targetPath in exportFiles.iterdir():
+
+        if not targetPath.is_dir():
             continue
-            
-        # Texture conversion. The goal here is to take the 2048 gml texture sheets with the TPI and feed it into 3ds standard 1024 quadrants
-        textureDir = targetPath / "textures"
+        
+        print(f"\nConverting textures and maps in {targetPath.stem} exports...")
+        # Texture conversion. The goal here is to take the 2048 gml texture sheets with the TPI and feed it into 3ds standard 1024 quadrants after this we slap it so hard it becomes
+        # a RGBA4444 file that is 2MB large which is perfect for the vram in a 3DS... This is done in the compilation protocol
+        textureDir = Path(targetPath / "textures" / "EmbeddedTextures")
+        csvPath = Path(targetPath / "texture_metadata_map.csv")
+        spriteMappings = []
+
+        if csvPath.exists():
+            with open(csvPath, mode="r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                spriteMappings = list(reader)
+        else:
+            print("Fatal: texture_metadata_map.csv missing!")
+            qualityCheck.append({ 
+                "task": f"Conversion Protocol in {targetPath}",
+                "command": " ".join(e.cmd), 
+                "error_msg": "Fatal: texture_metadata_map.csv missing! Check that TPI extraction ran properly."
+            })
+            continue
+
+
+        new3dsMappings = [] # Behold our first look at a finished product within all the code
+        straddleSprites = [] # This will hold sprites to be extracted to lost n' found sheets
+        new3dsTextureSheets = [] # This will hold all of our pngs to be quantized to rgba4444
+
         if textureDir.exists():
             for imgFile in textureDir.glob("*.png"):
-                pass # TODO: Pillow quadrant-slicing and UV map adjustments
+                baseName = imgFile.stem
+
+                with Image.open(imgFile) as img:
+                    width, height = img.size
+
+                    # There is a slight variance to the texture map size of some files so we need to handle that
+                    if width != 2048 and height != 2048:
+
+                        # We fill it with black space to make it 2048. There is a chance for optimization here if we want to cut certain quadrats out and focus on what
+                        # has sprite data.
+                        paddedImg = Image.new("RGBA", (2048, 2048), (0, 0, 0, 0))
+                        paddedImg.paste(img, (0, 0))
+                        img = paddedImg
+
+                    quadrants = {
+                        "Q1": img.crop((0, 0, 1024, 1024)),
+                        "Q2": img.crop((1024, 0, 2048, 1024)),
+                        "Q3": img.crop((0, 1024, 1024, 2048)),
+                        "Q4": img.crop((1024, 1024, 2048, 2048))
+                    }
+
+                    # Now we need to fix any loose sprites so that the 3DS doesn't choke if we have to feed it multiple sprite sheets to churn a sprite.
+                    # TODO: Toby Fox's sprite sheets are not in neat quadrants sooooo there is gonna be a ton for slicing and I may need to make new lost 
+                    # and found texture maps containing extra space for sprites. Keep in mind how to optimize lost and found sprite sheets.
+                    for row in spriteMappings:
+                        pageName = row["TexturePage"].replace(".png", "").replace(".PNG", "").strip()
+
+                        if pageName == baseName:
+                            try:
+                                srcX = int(row["SourceX"])
+                                srcY = int(row["SourceY"])
+                                width = int(row["Width"])
+                                height = int(row["Height"])
+
+                                rightEdge = srcX + width
+                                bottomEdge = srcY + height
+
+                                if rightEdge <= 1024 and bottomEdge <= 1024:
+                                    quad, ox, oy = "Q1", 0, 0
+                                elif srcX >= 1024 and bottomEdge <= 1024:
+                                    quad, ox, oy = "Q2", 1024, 0
+                                elif rightEdge <= 1024 and srcY >= 1024:
+                                    quad, ox, oy = "Q3", 0, 1024
+                                elif srcX >= 1024 and srcY >= 1024:
+                                    quad, ox, oy = "Q4", 1024, 1024
+                                else:
+                                    # grab sprite for lost n' found
+                                    straddleSprites.append({
+                                        "imgFile": imgFile,
+                                        "row": row,
+                                        "srcX": srcX, "srcY": srcY,
+                                        "width": width, "height":height
+                                    })
+                                    continue
+
+
+                                # Finally, we append the remapped coordinates to our final map and loop
+                                new3dsMappings.append({
+                                    "SpriteName": row["SpriteName"],
+                                    "FrameIndex": row["FrameIndex"],
+                                    "TexturePage": f"{baseName}_{quad}",
+                                    "SourceX": srcX - ox,
+                                    "SourceY": srcY - oy,
+                                    "Width": row["Width"],
+                                    "Height": row["Height"],
+                                    "OffsetX": row["OffsetX"],
+                                    "OffsetY": row["OffsetY"]
+                                })
+                            except ValueError:
+                                continue
+
+                    print(f"\nQuantizing and saving final quadrants for {baseName}...")
+                    for qName, qImg in quadrants.items():
+        
+                        rgba_img = qImg.convert("RGBA")
+                        rgba4444_spec = rgba_img.quantize(colors=256)
+                        
+                        try:
+                            rgba4444_spec.save(targetPath / f"{baseName}_{qName}.png")
+                            print(f"Quantized image of {baseName}_{qName} saved successfully!")
+                        except Exception as e:
+                            print(f"Error saving {baseName}_{qName}: {e}")
+                            qualityCheck.append({ 
+                            "task": f"Conversion Protocol in {targetPath}",
+                            "command": " ".join(e.cmd), 
+                            "error_msg": f"Error saving {baseName}_{qName}: {e}"})
+        else:
+            print(f"Fatal: {targetPath} texture directory missing!")
+            qualityCheck.append({ 
+                "task": f"Conversion Protocol in {targetPath}",
+                "command": " ".join(e.cmd), 
+                "error_msg": f"Fatal: {targetPath} texture directory missing! Check that texture extraction ran properly."
+            })
+            continue
+
+        if straddleSprites:
+            print(f"Processing {len(straddleSprites)} sprites into Lost n' Found sheets...")
+            LFIndex = 0
+            LFName = f"lostNFound{LFIndex}"
+            LFCanvas = Image.new("RGBA", (1024,1024), (0,0,0,0))
+
+            currX, currY = 0, 0
+            maxRowHeight = 0
+
+            for lostSprite in straddleSprites:
+                # Drop to next row when x is full
+                if currX + lostSprite["width"] > 1024:
+                    currX = 0
+                    currY += maxRowHeight
+                    maxRowHeight = 0
+                    
+                # Save and create new sheet when no more y is left (for further space optimization, cycle sprites)
+                if currY + lostSprite["height"] > 1024:
+                        LFCanvas.save(textureDir / f"3ds{LFName}.png")
+                        LFIndex += 1
+                        LFName = f"lostNFound{LFIndex}"
+                        LFCanvas = Image.new("RGBA", (1024,1024), (0,0,0,0))
+                        currX, currY = 0, 0
+                        maxRowHeight = 0
+
+                with Image.open(lostSprite["imgFile"]) as master:
+                    #This line is disgusting :(
+                    cropBox = (lostSprite["srcX"], lostSprite["srcY"], 
+                            lostSprite["srcX"] + lostSprite["width"], lostSprite["srcY"] + lostSprite["height"])
+                    spriteBox = master.crop(cropBox)
+                    LFCanvas.paste(spriteBox, (currX, currY))
+                
+                # Log the brand new 3DS mapping rules
+                new3dsMappings.append({
+                    "SpriteName": lostSprite["row"]["SpriteName"],
+                    "FrameIndex": lostSprite["row"]["FrameIndex"],
+                    "TexturePage": LFName,
+                    "SourceX": currX,
+                    "SourceY": currY,
+                    "Width": lostSprite["width"],
+                    "Height": lostSprite["height"],
+                    "OffsetX": lostSprite["row"]["OffsetX"],
+                    "OffsetY": lostSprite["row"]["OffsetY"]
+                })
+
+                maxRowHeight = max(maxRowHeight, lostSprite["height"])
+                currX += lostSprite["width"]
+            
+            # Save the LF sheet and continue
+            LFCanvas.save(textureDir / f"{LFName}.png")
+
+        # We lastly print our new mappings and assets
+        if new3dsMappings:
+            outputCSVPath = targetPath / "texture_metadata_map_3ds.csv"
+            with open(outputCSVPath, mode="w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=[
+                    "SpriteName", "FrameIndex", "TexturePage", 
+                    "SourceX", "SourceY", "Width", "Height", "OffsetX", "OffsetY"
+                ])
+                writer.writeheader()
+                writer.writerows(new3dsMappings)
+            print(f"Successfully created the {targetPath.stem} texture_metadata_map_3ds.csv")       
+
+        # With our new quadrants and lost n' founds, 
+        # we wanna prep them for downsampling but not scale them just yet.
+        # So we will quantize them and hold them as PNGs for compilation 
+        # for qName, qImg in quadrants.items():
+        #    print(f"Quantizing {qName} in {targetPath.stem} exports...")
+        #    rgba4444_spec = qImg.convert("RGBA").quantize(colors=256)
+        #    if(rgba4444_spec.save(targetPath / f"{baseName}_{qName}.png")):
+        #        print(f"Quantized image of {qName} saved!")
+        #    else
+        #        print(f"Error saving the image.")   
+        
 
         # Video conversion. We are just down scaling and converting to a nice pre-rendered format the 3ds will accept
-        videoDir = targetPath / "videos"
+        videoDir = Path(targetPath / "videos")
         if videoDir.exists():
             for videoFile in videoDir.glob("*"):
                 pass # TODO: downscaling
 
         # Music conversion. Near same as videos
-        musDir = targetPath / "mus"
+        musDir = Path(targetPath / "mus")
         if musDir.exists():
             for audioFile in musDir.glob("*.ogg"):
                 pass # TODO: downscaling
@@ -334,6 +529,10 @@ def qualityCheckProtocol(errors, exportRoot="rawExports"):
 
 if __name__ == "__main__":
     # Test execution to verify directory construction works smoothly
-    conversionProtocol(extractionProtocol(CHAPTERS, GLOBAL_DATA, EXPORTS))
+    extractionProtocol(CHAPTERS, GLOBAL_DATA, EXPORTS)
+    conversionProtocol(EXPORTS)
     qualityCheckProtocol(qualityCheck, exportRoot="rawExports")
     print("Reached end of execution!")
+
+
+#TODO: quantize lost and found
