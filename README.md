@@ -15,3 +15,13 @@ being used to train AI. I hope you can respect that.
 3. Have steam install DELTARUNE into this folder.
 4. Run roots.py via the command "python 3 roots.py"
 5. TBD
+
+### TODO Optimization
+1. Combine LostnFound sprite pages to decrease 
+
+### TODO Possible issues
+1. Tower sprites in CH4 may be bigger than 1024 so in compilation I may need to loop the sprites around. This may make chapter 4 unplayable but if anything we can just hold off for now.4
+
+
+
+

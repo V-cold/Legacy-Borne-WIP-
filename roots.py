@@ -267,7 +267,6 @@ def conversionProtocol(exportFiles):
         print("Fatal: Master exports directory missing!")
         qualityCheck.append({ 
             "task": "Conversion Protocol",
-            "command": " ".join(e.cmd), 
             "error_msg": "Fatal: Master exports directory missing!"
         })
         return
@@ -280,8 +279,10 @@ def conversionProtocol(exportFiles):
         print(f"\nConverting textures and maps in {targetPath.stem} exports...")
         # Texture conversion. The goal here is to take the 2048 gml texture sheets with the TPI and feed it into 3ds standard 1024 quadrants after this we slap it so hard it becomes
         # a RGBA4444 file that is 2MB large which is perfect for the vram in a 3DS... This is done in the compilation protocol
+        intermediateFile = Path(BASE_DIR / "LegacyBorne" / "intermediate"/targetPath.stem)
+        intermediateFile.mkdir(parents=True, exist_ok=True)
         textureDir = Path(targetPath / "textures" / "EmbeddedTextures")
-        csvPath = Path(targetPath / "texture_metadata_map.csv")
+        csvPath = Path(targetPath  / "texture_metadata_map.csv")
         spriteMappings = []
 
         if csvPath.exists():
@@ -291,8 +292,7 @@ def conversionProtocol(exportFiles):
         else:
             print("Fatal: texture_metadata_map.csv missing!")
             qualityCheck.append({ 
-                "task": f"Conversion Protocol in {targetPath}",
-                "command": " ".join(e.cmd), 
+                "task": f"Conversion Protocol in {targetPath}", 
                 "error_msg": "Fatal: texture_metadata_map.csv missing! Check that TPI extraction ran properly."
             })
             continue
@@ -325,9 +325,6 @@ def conversionProtocol(exportFiles):
                         "Q4": img.crop((1024, 1024, 2048, 2048))
                     }
 
-                    # Now we need to fix any loose sprites so that the 3DS doesn't choke if we have to feed it multiple sprite sheets to churn a sprite.
-                    # TODO: Toby Fox's sprite sheets are not in neat quadrants sooooo there is gonna be a ton for slicing and I may need to make new lost 
-                    # and found texture maps containing extra space for sprites. Keep in mind how to optimize lost and found sprite sheets.
                     for row in spriteMappings:
                         pageName = row["TexturePage"].replace(".png", "").replace(".PNG", "").strip()
 
@@ -377,19 +374,17 @@ def conversionProtocol(exportFiles):
 
                     print(f"\nQuantizing and saving final quadrants for {baseName}...")
                     for qName, qImg in quadrants.items():
-        
-                        rgba_img = qImg.convert("RGBA")
-                        rgba4444_spec = rgba_img.quantize(colors=256)
-                        
-                        try:
-                            rgba4444_spec.save(targetPath / f"{baseName}_{qName}.png")
-                            print(f"Quantized image of {baseName}_{qName} saved successfully!")
-                        except Exception as e:
-                            print(f"Error saving {baseName}_{qName}: {e}")
-                            qualityCheck.append({ 
-                            "task": f"Conversion Protocol in {targetPath}",
-                            "command": " ".join(e.cmd), 
-                            "error_msg": f"Error saving {baseName}_{qName}: {e}"})
+                        qImg = qImg.convert("RGBA").quantize(colors=256)
+                        if qImg.getbbox():
+                            try:
+                                qImg.save(intermediateFile / f"{baseName}_{qName}.png")
+                                print(f"Quantized image of {baseName}_{qName} saved successfully!")
+                            except Exception as e:
+                                print(f"Error saving {baseName}_{qName}: {e}")
+                                qualityCheck.append({ 
+                                "task": f"Conversion Protocol in {targetPath}",
+                                "command": " ".join(e.cmd), 
+                                "error_msg": f"Error saving {baseName}_{qName}: {e}"})
         else:
             print(f"Fatal: {targetPath} texture directory missing!")
             qualityCheck.append({ 
@@ -402,7 +397,7 @@ def conversionProtocol(exportFiles):
         if straddleSprites:
             print(f"Processing {len(straddleSprites)} sprites into Lost n' Found sheets...")
             LFIndex = 0
-            LFName = f"lostNFound{LFIndex}"
+            LFName = f"LFTexture_{LFIndex}"
             LFCanvas = Image.new("RGBA", (1024,1024), (0,0,0,0))
 
             currX, currY = 0, 0
@@ -417,9 +412,11 @@ def conversionProtocol(exportFiles):
                     
                 # Save and create new sheet when no more y is left (for further space optimization, cycle sprites)
                 if currY + lostSprite["height"] > 1024:
-                        LFCanvas.save(textureDir / f"3ds{LFName}.png")
+                        # We shouldn't need to run a binary on empty images here.
+                        LFCanvas = LFCanvas.convert("RGBA").quantize(colors=256)
+                        LFCanvas.save(intermediateFile / f"{LFName}.png")
                         LFIndex += 1
-                        LFName = f"lostNFound{LFIndex}"
+                        LFName = f"LFTexture_{LFIndex}"
                         LFCanvas = Image.new("RGBA", (1024,1024), (0,0,0,0))
                         currX, currY = 0, 0
                         maxRowHeight = 0
@@ -448,11 +445,13 @@ def conversionProtocol(exportFiles):
                 currX += lostSprite["width"]
             
             # Save the LF sheet and continue
-            LFCanvas.save(textureDir / f"{LFName}.png")
+            if LFCanvas.getbbox():
+                LFCanvas = LFCanvas.convert("RGBA").quantize(colors=256)
+                LFCanvas.save(intermediateFile / f"{LFName}.png")
 
         # We lastly print our new mappings and assets
         if new3dsMappings:
-            outputCSVPath = targetPath / "texture_metadata_map_3ds.csv"
+            outputCSVPath = intermediateFile / "texture_metadata_map_3ds.csv"
             with open(outputCSVPath, mode="w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=[
                     "SpriteName", "FrameIndex", "TexturePage", 
@@ -461,18 +460,6 @@ def conversionProtocol(exportFiles):
                 writer.writeheader()
                 writer.writerows(new3dsMappings)
             print(f"Successfully created the {targetPath.stem} texture_metadata_map_3ds.csv")       
-
-        # With our new quadrants and lost n' founds, 
-        # we wanna prep them for downsampling but not scale them just yet.
-        # So we will quantize them and hold them as PNGs for compilation 
-        # for qName, qImg in quadrants.items():
-        #    print(f"Quantizing {qName} in {targetPath.stem} exports...")
-        #    rgba4444_spec = qImg.convert("RGBA").quantize(colors=256)
-        #    if(rgba4444_spec.save(targetPath / f"{baseName}_{qName}.png")):
-        #        print(f"Quantized image of {qName} saved!")
-        #    else
-        #        print(f"Error saving the image.")   
-        
 
         # Video conversion. We are just down scaling and converting to a nice pre-rendered format the 3ds will accept
         videoDir = Path(targetPath / "videos")
@@ -535,4 +522,5 @@ if __name__ == "__main__":
     print("Reached end of execution!")
 
 
-#TODO: quantize lost and found
+#TODO: too many extra files are create - lost n found and the empty quadrant files
+#TODO: move quantized files to a staging area or delete texture files and use the textures area
