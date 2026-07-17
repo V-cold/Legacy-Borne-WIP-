@@ -26,6 +26,7 @@ BASE_DIR = Path(__file__).parent.resolve()
 DELTARUNE = BASE_DIR / "DELTARUNE"
 GLOBAL_MUS = DELTARUNE / "mus"
 GLOBAL_DATA = Path("DELTARUNE/data.win")
+CLIENT_PATH = BASE_DIR / "UndermodCLI" / "UndertaleModCli"
 
 # chapters: I opted to make this a dictionary so we can cycle through each chapter sequentially when loading. Part of me wonders if there is a more optimized way
 CHAPTERS = {
@@ -70,7 +71,6 @@ def extractionProtocol(chapters, dataMain, exportFiles):
     # TODO: String extraction may not be neccessary.
     # TODO: Video extraction for tenna cutscene and flowery cutscene(can grab this straight from deltarune file)
     BASE_DIR = Path(__file__).parent.resolve()
-    CLIENT_PATH = BASE_DIR / "UndermodCLI" / "UndertaleModCli"
     script_path = BASE_DIR / "LBScripts" / "extract_texture_map.csx"
 
     # Utilizes Undermod to dump assets for each chapter and then global
@@ -259,6 +259,10 @@ def extractionProtocol(chapters, dataMain, exportFiles):
         shutil.copy2(audio, globalMusExport / audio.name)
     
     pass
+
+#---------------------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------------------
 
 def conversionProtocol(exportFiles):
     print("\nRunning Conversion Protocol ...")
@@ -470,8 +474,27 @@ def conversionProtocol(exportFiles):
         # Music conversion. Near same as videos
         musDir = Path(targetPath / "mus")
         if musDir.exists():
-            for audioFile in musDir.glob("*.ogg"):
-                pass # TODO: downscaling
+            for targetPath in exportFiles.iterdir():
+
+                if not targetPath.is_dir():
+                    continue
+
+                try:
+                    subprocess.run(["/3DSkit/3DSkit.py", "-pf", "BCSTM", targetPath.stem ".bcstm", "-O" #extracted loop metadata here, File names 
+                    ]
+                    , check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+
+                
+                except subprocess.CalledProcessError as e:
+                    print(f"Error in {targetPath.stem} music conversion: {e}")
+                    qualityCheck.append({
+                        "chapter": f"{targetPath.stem}", 
+                        "task": "Music Conversion",
+                        "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+                    })
+
+                for audioFile in musDir.glob("*.ogg"):
+                    pass # TODO: downscaling
 
         #POSSIBLE ROADBLOCKS: 
         #File size won't be an issue on static storage, but ram wise it will be
