@@ -271,7 +271,36 @@ def conversionProtocol(exportFiles):
         print("Fatal: Master exports directory missing!")
         qualityCheck.append({ 
             "task": "Conversion Protocol",
-            "error_msg": "Fatal: Master exports directory missing!"
+            "error_msg# LoopingAudioConverter
+
+This application acts as a frontend to other programs and libraries, and allows conversion between the Wii .brstm format and a variety of other formats.
+
+Requirements:
+
+* Windows
+* .NET Framework 4.8
+* [Microsoft Visual C++ Redistributable (2022+)](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170)
+
+Supported input formats:
+
+    WAV (with or without "smpl" chunk to denote looping audio)
+    MP3, using madplay
+	M4A/AAC, using faad
+    VGM/VGZ, using vgm2wav
+    Any audio format supported by SoX
+    Any audio format supported by vgmstream (including BRSTM and BCSTM)
+
+Supported output formats:
+
+    WAV (with "smpl" chunk if the audio should loop; vgmstream can read these loops)
+    MP3, using lame
+    FLAC or Ogg Vorbis, using SoX
+    RSTM (.brstm) and CSTM (.bcstm), using RSTMLib, a subset of BrawlLib
+
+See LoopingAudioConverter/About.html for more information.
+
+**Note:** Each project in this repository has different license terms. See the individual folders for details.
+": "Fatal: Master exports directory missing!"
         })
         return
 
@@ -402,7 +431,7 @@ def conversionProtocol(exportFiles):
             print(f"Processing {len(straddleSprites)} sprites into Lost n' Found sheets...")
             LFIndex = 0
             LFName = f"LFTexture_{LFIndex}"
-            LFCanvas = Image.new("RGBA", (1024,1024), (0,0,0,0))
+            LFCanvas = Image.new("RGBA", (1024, 1024), (0,0,0,0))
 
             currX, currY = 0, 0
             maxRowHeight = 0
@@ -466,25 +495,56 @@ def conversionProtocol(exportFiles):
             print(f"Successfully created the {targetPath.stem} texture_metadata_map_3ds.csv")       
 
         # Video conversion. We are just down scaling and converting to a nice pre-rendered format the 3ds will accept
-        videoDir = Path(targetPath / "videos")
+        videoDir = Path(targetPath / "vid")
         if videoDir.exists():
             for videoFile in videoDir.glob("*"):
-                pass # TODO: downscaling
-
-        # Music conversion. Near same as videos
-        musDir = Path(targetPath / "mus")
-        if musDir.exists():
-            for targetPath in exportFiles.iterdir():
-
-                if not targetPath.is_dir():
-                    continue
+                outputFile = intermediateFile / targetPath.stem / f"{videoFile.stem}.avi"
 
                 try:
-                    subprocess.run(["/3DSkit/3DSkit.py", "-pf", "BCSTM", targetPath.stem ".bcstm", "-O" #extracted loop metadata here, File names 
-                    ]
-                    , check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+                    # Here, we use ffmpeg's library as a subprocess to squish Trick Tony's rare audio files.
+                    subprocess.run([
+                        "ffmpeg",
+                        "-y",                 
+                        "-i", str(videoFile), 
+                        "-vf", "scale=400:240", # CRITICAL: Resizes directly to 3DS top-screen resolution
+                        "-c:v", "mjpeg",      
+                        "-q:v", "3",          
+                        "-r", "30",           
+                        "-an",                
+                        str(outputFile)       
+                    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
 
+                except subprocess.CalledProcessError as e:
+                    print(f"Error in {targetPath.stem} music conversion: {e}")
+                    qualityCheck.append({
+                        "chapter": f"{targetPath.stem}", 
+                        "task": "Video Conversion",
+                        "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+                    })
+
+                pass # TODO: downscaling
+
+        musDir = Path(targetPath / "mus")
+        if musDir.exists():
+
+            #extract audio data csv
+            for audioFile in musDir.glob("*.ogg"):
+
+                outputFile = intermediateFile / targetPath.stem / f"{audioFile.stem}.bcstm"
+                tempWavFile = musDir / f"{audioFile.stem}.wav"
+                loopStart = "0"
+                loopEnd = "0"  
+
+                try:
+                    subprocess.run([
+                        "ffmpeg",
+                        "-y",                 
+                        "-i", str(audioFile), # Input ogg
+                        str(tempWavFile)      # Output temporary wav
+                    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
                 
+                #callscript for BCSTM conversion
+
                 except subprocess.CalledProcessError as e:
                     print(f"Error in {targetPath.stem} music conversion: {e}")
                     qualityCheck.append({
@@ -493,7 +553,7 @@ def conversionProtocol(exportFiles):
                         "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
                     })
 
-                for audioFile in musDir.glob("*.ogg"):
+                
                     pass # TODO: downscaling
 
         #POSSIBLE ROADBLOCKS: 
