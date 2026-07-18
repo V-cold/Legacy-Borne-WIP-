@@ -15,6 +15,7 @@ import shutil
 import sys
 import csv
 from pathlib import Path
+from LBScripts.BCSTMCreationProtocol import BCSTMproto 
 
 # Used in Texture sheet conversion
 from PIL import Image
@@ -271,36 +272,7 @@ def conversionProtocol(exportFiles):
         print("Fatal: Master exports directory missing!")
         qualityCheck.append({ 
             "task": "Conversion Protocol",
-            "error_msg# LoopingAudioConverter
-
-This application acts as a frontend to other programs and libraries, and allows conversion between the Wii .brstm format and a variety of other formats.
-
-Requirements:
-
-* Windows
-* .NET Framework 4.8
-* [Microsoft Visual C++ Redistributable (2022+)](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170)
-
-Supported input formats:
-
-    WAV (with or without "smpl" chunk to denote looping audio)
-    MP3, using madplay
-	M4A/AAC, using faad
-    VGM/VGZ, using vgm2wav
-    Any audio format supported by SoX
-    Any audio format supported by vgmstream (including BRSTM and BCSTM)
-
-Supported output formats:
-
-    WAV (with "smpl" chunk if the audio should loop; vgmstream can read these loops)
-    MP3, using lame
-    FLAC or Ogg Vorbis, using SoX
-    RSTM (.brstm) and CSTM (.bcstm), using RSTMLib, a subset of BrawlLib
-
-See LoopingAudioConverter/About.html for more information.
-
-**Note:** Each project in this repository has different license terms. See the individual folders for details.
-": "Fatal: Master exports directory missing!"
+            "error_msg": "Fatal: Master exports directory missing!"            
         })
         return
 
@@ -530,10 +502,13 @@ See LoopingAudioConverter/About.html for more information.
             #extract audio data csv
             for audioFile in musDir.glob("*.ogg"):
 
+                #TODO: Music goes into a file called C (CH1) fix to be mus
                 outputFile = intermediateFile / targetPath.stem / f"{audioFile.stem}.bcstm"
                 tempWavFile = musDir / f"{audioFile.stem}.wav"
                 loopStart = "0"
                 loopEnd = "0"  
+
+                outputFile.parent.mkdir(parents=True, exist_ok=True)
 
                 try:
                     subprocess.run([
@@ -543,7 +518,28 @@ See LoopingAudioConverter/About.html for more information.
                         str(tempWavFile)      # Output temporary wav
                     ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
                 
-                #callscript for BCSTM conversion
+                    # BCSTM Conversion (Programmers Note: This was going to be the easiest step in my head and it turned into the most daunting task.)
+                    #________________________________________________________________________________________________________#
+                    #________________________________________________________________________________________________________#
+                    #________________________________________________________________________________________________________#
+                    # Wave Extraction
+
+                    # DSP-ADPCM Encoding
+                    last1 = 0
+                    last2 = 0
+
+                    # Block Mapping
+
+                    # File Casting
+                    
+                    BCSTMfile = BCSTMproto(tempWavFile, outputFile)
+                    BCSTMfile.creationProto() # Check LBScripts BCSTMprotocol if this throws error
+
+                    if tempWavFile.exists():
+                        tempWavFile.unlink()
+                    #________________________________________________________________________________________________________#
+                    #________________________________________________________________________________________________________#
+                    #________________________________________________________________________________________________________#
 
                 except subprocess.CalledProcessError as e:
                     print(f"Error in {targetPath.stem} music conversion: {e}")
@@ -551,6 +547,16 @@ See LoopingAudioConverter/About.html for more information.
                         "chapter": f"{targetPath.stem}", 
                         "task": "Music Conversion",
                         "error_msg": e.stderr.strip() if e.stderr else "Unknown CLI Error"
+                    })
+
+                except Exception as e:
+                    # catch issues in BCSTM library
+                    print(f"Error in {targetPath.stem} binary casting: {e}")
+                    qualityCheck.append({
+                        "chapter": f"{targetPath.stem}", 
+                        "task": f"BCSTM Binary Casting ({audioFile.stem})",
+                        "command": "BCSTMprotocol.creationProto()",
+                        "error_msg": str(e)
                     })
 
                 

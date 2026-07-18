@@ -1,4 +1,4 @@
-# Legacy Borne 0.4.2.1 Pre-alpha
+# Legacy Borne 0.4.2.2 Pre-alpha
 This repository is open source and made to be modular
 use this however you wish, but I do not consent to this
 being used to train AI. I hope you can respect that.
