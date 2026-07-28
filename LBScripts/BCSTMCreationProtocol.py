@@ -9,36 +9,40 @@ class BCSTMproto:
         self.outPath = Path(outPath)
 
     def creationProto(self):
+        # Formulas / Math
+        # Info
 
-        # We need a strict Big-Edian File Header
+        # Seek
+        
+        # Data
+
+        #WAV Conversion
+
+        # Using https://www.3dbrew.org/wiki/BCSTM as referenece
+        # Write section
         try:
             with open(self.outPath, 'wb') as f:
+                # HEADER 
                 f.write(b"CSTM")
                 f.write(struct.pack("<H",0xFEFF))
-                f.write(struct.pack("<H", 0x0040))
+                f.write(struct.pack("<H", header_size))
                 f.write(struct.pack("<I", 0x02000000))
-             #  f.write(struct.pack("<I", fileSize))
+                f.write(struct.pack("<I", total_file_size))
                 f.write(struct.pack("<H", 0x0003))   
                 f.write(struct.pack("<H", 0x0000))  
 
-                # 1. Info
-                f.write(struct.pack("<H", 0x4000))
-                f.write(struct.pack("<H", 0x0000))
-             #  f.write(struct.pack("<I", infoOffset)) 
-             #  f.write(struct.pack("<I", infoSize))
+                # Info Block offset relative to start file
+                self.write_sized_reference(f, 0x4000, info_offset, info_size)
+                
+                # Seek Block offset relative to start file
+                self.write_sized_reference(f, 0x4001, seek_offset, seek_size)
+                
+                # Data Block offset relative to start file
+                self.write_sized_reference(f, 0x4002, data_offset, data_size)
 
-                # 2. Seek
-                f.write(struct.pack("<H", 0x4001))
-                f.write(struct.pack("<H", 0x0000))
-             #  f.write(struct.pack("<I", seekOffset))
-             #  f.write(struct.pack("<I", seekSize))
-
-                # 3. Data
-                f.write(struct.pack("<H", 0x4002))
-                f.write(struct.pack("<H", 0x0000))
-             #  f.write(struct.pack("<I", dataOffset))
-             #  f.write(struct.pack("<I", dataSize))
-
+                # INFO
+                # SEEK
+                # DATA 
             return True
 
         except Exception as e: #This will be intercepted by our quality check
