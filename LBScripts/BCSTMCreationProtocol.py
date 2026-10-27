@@ -283,7 +283,7 @@ def build_info_block(sample_rate, frame_count, channel_count, layout, sample_off
 
 ## HEADER
 
-def build_header(info_size, seek_size, data_size)
+def build_header(info_size, seek_size, data_size):
     # Constraints
     HEADER_SIZE = 0x40
     SECTION_ALIGNMENT = 0x20
@@ -294,8 +294,8 @@ def build_header(info_size, seek_size, data_size)
     data_off = seek_off + seek_size
     file_size = data_off + data_size
 
-    header = b'CSTM'
-    +(struct.pack('<HHII', 0xFEFF, 0x40, 0x02000000, file_size)
+    header = (b'CSTM'
+    +(struct.pack('<HHII', 0xFEFF, 0x40, 0x02000000, file_size))
     +(struct.pack('<HH', 3, 0))
     +sized_reference(0x4000, info_off, info_size)
     +sized_reference(0x4001, seek_off, seek_size)
@@ -306,7 +306,7 @@ def build_header(info_size, seek_size, data_size)
     #verify
     if len(header) != 0x40:
         raise ValueError("Header has unexpected size (must be 0x40).")
-        
+
     return header
 
 ## CONVERT
