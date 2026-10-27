@@ -7,7 +7,8 @@
 #https://www.3dbrew.org/wiki/BCSTM for more information of the actual BCSTM file
 
 # Libraries
-import array, math, wave, struct
+import array, math, wave, struct, os, subprocess, tempfile 
+from pathlib import Path
 
 def align(value, boundary=0x20):
     remainder = value % boundary
@@ -312,14 +313,80 @@ def build_header(info_size, seek_size, data_size):
 ## CONVERT
 
 def convert(wav_path, out_path):
-    #call read_wav, compute_layout, build_data_block, build_seek_block and build_info_block, then build_header, and join them as header + info + seek + data. Write to out_path + '.tmp' with open(tmp, 'wb'), then os.replace(tmp, out_path) (needs import os). Only write after everything has been built successfully.
-    return 0
+    rate, frames, channels = read_wav(wav_path)
+    layout = compute_layout(frames)
+    
+    ## SEEK
+    seek = build_seek_block()
+    
+    #DATA
+    data, sample_offset = build_data_block(channels, layout)
+    
+    ## INFO
+    info = build_info_block(
+        rate, 
+        frames, 
+        len(channels), 
+        layout, 
+        sample_offset
+    )
+
+    ## HEADER
+    header = build_header(len(info), len(seek), len(data))
+
+    ## VERIFICATION
+    result = header + info + seek + data
+    verify(result)
+
+    ## WRITING
+    destination = Path(out_path)
+    temporary = destination.with_name(destination.name + '.tmp')
+
+    try:
+        with open(temporary, 'wb') as f:
+            f.write(result)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, destination)
+    
+    except Exception:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+    return result
+
+def convert_ogg(ogg_path, out_path, ffmpeg='ffmpeg'):
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        wav_path = Path(temporary_directory) / 'decoded.wav' #should be ogg.wav
+
+        subprocess.run(
+            [
+                ffmpeg,
+                '-nostdin',
+                '-y',
+                '-i', str(ogg_path),
+                '-map', '0:a:0',
+                '-c:a', 'pcm_s16le',
+                str(wav_path),
+            ],
+            check=True,
+        )
+
+        return convert(wav_path, out_path)
 
 def verify(result):
-    #Run asserts to test wether the audio was correctly converted and is ready to ship
+    #Test wether the audio was correctly converted and is ready to ship
     return 0
+########## MAIN ########## 
+ 
 
-########### TESTING ###############
+
+
+#return convert(wav_path,out_path)
+########### TESTING ########## 
 
 assert align(0) == 0
 assert align(1) == 0x20
@@ -430,6 +497,7 @@ assert struct.unpack_from('<I', header, 0x34)[0] == 20064   # DATA size
 
 ## CONVERT
 convert('test_stereo.wav', 'out.bcstm')
+convert('larger_test.wav', 'larger_out.bcstm')
 
 #The last line checks that the stream info bytes really sit at the position your function claims, which proves your positions and your assembly
 #frames, rate = 5000, 32000
