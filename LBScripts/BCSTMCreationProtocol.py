@@ -294,15 +294,15 @@ def build_header(info_size, seek_size, data_size):
     data_off = seek_off + seek_size
     file_size = data_off + data_size
 
-    header = (b'CSTM'
-    +(struct.pack('<HHII', 0xFEFF, 0x40, 0x02000000, file_size))
-    +(struct.pack('<HH', 3, 0))
-    +sized_reference(0x4000, info_off, info_size)
-    +sized_reference(0x4001, seek_off, seek_size)
-    +sized_reference(0x4002, data_off, data_size)
+    header = (
+        b'CSTM' 
+        + (struct.pack('<HHII', 0xFEFF, 0x40, 0x02000000, file_size)) 
+        +(struct.pack('<HH', 3, 0))
+        +sized_reference(0x4000, info_off, info_size)
+        +sized_reference(0x4001, seek_off, seek_size)
+        +sized_reference(0x4002, data_off, data_size)
     )
     header = pad_to(header, 0x40)
-
     #verify
     if len(header) != 0x40:
         raise ValueError("Header has unexpected size (must be 0x40).")
