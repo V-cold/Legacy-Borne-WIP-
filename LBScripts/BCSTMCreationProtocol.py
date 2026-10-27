@@ -6,7 +6,7 @@
 # < is little edian B is x00 H is x0000 I is x00000000
 #https://www.3dbrew.org/wiki/BCSTM for more information of the actual BCSTM file
 
-# Libarires
+# Libraries
 import array, math, wave, struct
 
 def align(value, boundary=0x20):
@@ -78,7 +78,7 @@ def compute_layout(frame_count):
 ## DATA BLOCK
 
 def build_data_block(channels,layout):
-    # defintions
+    # definitions
     block_count = layout['block_count']
     block_size = layout['block_size']
     last_size = layout['last_size']
@@ -112,8 +112,8 @@ def build_data_block(channels,layout):
         for ch in channels:
             piece = ch[start:start + actual_size]
 
-        payload.extend(piece)
-        payload.extend(bytes(stored_size - actual_size))
+            payload.extend(piece)
+            payload.extend(bytes(stored_size - actual_size))
 
     data = bytearray(0x20)
     data[0:4] = b'DATA'
@@ -168,15 +168,156 @@ def build_track_info(channel_count):
 def build_channel_info(channel_count): return reference(0, 0xFFFFFFFF) * channel_count
     
 # Find proper byte positions for writing 
+# Ref table helper function
+def reference_table_size(count):
+    return 4+ count * 8
+
 def compute_info_positions(channel_count):
-    info_positions = struct.pack('<I', (()))
-    return info_positions
+    stream        = 0x20
+    stream_size   = 0x38
+
+    track_table = stream + stream_size
+    track_table_size = reference_table_size(1)
+
+    channel_table = track_table + track_table_size
+    channel_table_size = reference_table_size(channel_count)
+
+    track_info    = channel_table + channel_table_size
+    byte_table_size = align(4 + channel_count, 4)
+    track_info_size = 0x0C + byte_table_size
+    
+
+    channel_info  = track_info + track_info_size
+    channel_info_size = channel_count * 8
+
+    end           = channel_info + channel_info_size
+    info_size = align(end, 0x20)
+    
+    return {
+        'stream': stream,
+        'stream_size': stream_size,
+        'track_table': track_table,
+        'track_table_size': track_table_size,
+        'channel_table': channel_table,
+        'channel_table_size': channel_table_size,
+        'track_info': track_info,
+        'track_info_size': track_info_size,
+        'channel_info': channel_info,
+        'channel_info_size': channel_info_size,
+        'end': end,
+        'info_size': info_size,
+    }
 
 def build_info_block(sample_rate, frame_count, channel_count, layout, sample_offset):
-    info = 0
+    # Setup positions
+    pos = compute_info_positions(channel_count)
+
+    # build stream info, track tables, track info, and channel info
+    
+    ## STREAM INFO
+    stream_info = build_stream_info(
+        sample_rate, 
+        frame_count, 
+        channel_count, 
+        layout, 
+        sample_offset
+    )
+    # verify
+    if len(stream_info) != pos['stream_size']:
+        raise ValueError("Stream Info has an unexpected size.")
+    
+    ## TRACK TABLE
+    track_table = (struct.pack('<I', 1)+ reference(0x4101, pos['track_info'] - pos['track_table']))
+    #verify
+    if len(track_table) != pos['track_table_size']:
+        raise ValueError("Track Table has an unexpected size.")
+
+    ## TRACK INFO
+    track_info = build_track_info(channel_count)
+    #verify
+    if len(track_info) != pos['track_info_size']:
+        raise ValueError("Track Info has an unexpected size.")
+
+    ## CHANNEL TABLE
+    channel_table = bytearray()
+    channel_table.extend(struct.pack('<I', channel_count))
+    for i in range(channel_count):
+        channel_pos = pos['channel_info'] + i*8 # These 8 byte records are ADPCM information when and if ADPCM is added Info and Seek will need updates
+        channel_table.extend(reference(0x4102, channel_pos - pos['channel_table']))
+    channel_table = bytes(channel_table)
+
+    ## CHANNEL INFO
+    channel_info = build_channel_info(channel_count)
+    #verify
+    if len(channel_info) != pos['channel_info_size']:
+        raise ValueError("Channel Info has an unexpected size.")
+
+    ## INFO HEADER
+    info_header = (b'INFO'+ struct.pack('<I', pos['info_size']) 
+        + reference(0x4100, pos['stream'] - 0x08)
+        + reference(0x0101, pos['track_table'] - 0x08)
+        + reference(0x0101, pos['channel_table'] - 0x08)
+    )
+
+    ##INFO BLOCK
+    info = (
+        info_header 
+        + stream_info
+        + track_table
+        + channel_table
+        + track_info
+        + channel_info
+       #+ DSP ADPSM Info
+       #+ DSP ADPCM Param
+       #+ DSP ADPCM Context
+       #+ IMA ADPCM Info
+       #+ IMA ADPCM Context
+    )
+
+    info = pad_to(info, 0x20)
+    #verify
+    if len(info) != pos['info_size']:
+        raise ValueError("Info has and unexpected size.")
+    
     return info
 
+## HEADER
 
+def build_header(info_size, seek_size, data_size)
+    # Constraints
+    HEADER_SIZE = 0x40
+    SECTION_ALIGNMENT = 0x20
+
+    #offsets relative to the start of the file
+    info_off = HEADER_SIZE
+    seek_off = info_off + info_size
+    data_off = seek_off + seek_size
+    file_size = data_off + data_size
+
+    header = b'CSTM'
+    +(struct.pack('<HHII', 0xFEFF, 0x40, 0x02000000, file_size)
+    +(struct.pack('<HH', 3, 0))
+    +sized_reference(0x4000, info_off, info_size)
+    +sized_reference(0x4001, seek_off, seek_size)
+    +sized_reference(0x4002, data_off, data_size)
+    )
+    header = pad_to(header, 0x40)
+
+    #verify
+    if len(header) != 0x40:
+        raise ValueError("Header has unexpected size (must be 0x40).")
+        
+    return header
+
+## CONVERT
+
+def convert(wav_path, out_path):
+    #call read_wav, compute_layout, build_data_block, build_seek_block and build_info_block, then build_header, and join them as header + info + seek + data. Write to out_path + '.tmp' with open(tmp, 'wb'), then os.replace(tmp, out_path) (needs import os). Only write after everything has been built successfully.
+    return 0
+
+def verify(result):
+    #Run asserts to test wether the audio was correctly converted and is ready to ship
+    return 0
 
 ########### TESTING ###############
 
@@ -255,6 +396,42 @@ print('SEEK size:', hex(len(seek)))
 print('DATA size:', hex(len(data)))
 print('Sample offset:', hex(sample_offset))
 print('Stream Info size:', hex(len(stream_info)))
+
+
+
+
+## INFO
+pos = compute_info_positions(2)
+
+info = build_info_block(rate, frames, len(channels), layout, sample_offset)
+
+assert len(info) == 0xA0
+assert info[:4] == b'INFO'
+assert struct.unpack_from('<I', info, 4)[0] == len(info)
+assert struct.unpack_from('<I', info, 0x0C)[0] == 0x18   # stream info ref
+assert struct.unpack_from('<I', info, 0x14)[0] == 0x50   # track table ref
+assert struct.unpack_from('<I', info, 0x1C)[0] == 0x5C   # channel table ref
+assert struct.unpack_from('<I', info, 0x60)[0] == 0x20   # track table entry
+assert struct.unpack_from('<I', info, 0x6C)[0] == 0x28   # channel entry 0
+assert struct.unpack_from('<I', info, 0x74)[0] == 0x30   # channel entry 1
+assert info[pos['stream']:pos['stream'] + 0x38] == stream_info
+
+## HEADER
+
+header = build_header(len(info), len(seek), len(data))
+assert len(header) == 0x40
+assert header[:4] == b'CSTM'
+assert header[4:6] == b'\xff\xfe'
+assert struct.unpack_from('<I', header, 0x0C)[0] == 20320   # file size
+assert struct.unpack_from('<I', header, 0x18)[0] == 0x40    # INFO offset
+assert struct.unpack_from('<I', header, 0x24)[0] == 0xE0    # SEEK offset
+assert struct.unpack_from('<I', header, 0x30)[0] == 0x100   # DATA offset
+assert struct.unpack_from('<I', header, 0x34)[0] == 20064   # DATA size
+
+## CONVERT
+convert('test_stereo.wav', 'out.bcstm')
+
+#The last line checks that the stream info bytes really sit at the position your function claims, which proves your positions and your assembly
 #frames, rate = 5000, 32000
 #with wave.open('test_stereo.wav', 'wb') as w:
 #    w.setnchannels(2)
